@@ -1,0 +1,23 @@
+<mat-toolbar color="primary">
+  <span>{{ title }}</span>
+  <span class="spacer"></span>
+  <button mat-button (click)="connect()">Connect</button>
+  <button mat-button (click)="disconnect()">Disconnect</button>
+</mat-toolbar>
+<div class="container">
+  <section class="conversation">
+    <mat-list>
+      <mat-list-item *ngFor="let message of messages">
+        <h4 matLine>{{ message.sender }}</h4>
+        <p matLine>{{ message.body }}</p>
+      </mat-list-item>
+    </mat-list>
+  </section>
+  <section class="composer">
+    <mat-form-field appearance="outline" class="composer-input">
+      <mat-label>Message</mat-label>
+      <input matInput [(ngModel)]="plaintextMessage" />
+    </mat-form-field>
+    <button mat-raised-button color="accent" (click)="send()">Send</button>
+  </section>
+</div>

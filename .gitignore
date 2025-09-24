@@ -1,0 +1,9 @@
+node_modules
+pnpm-lock.yaml
+dist
+.out
+docker-data
+coverage
+.DS_Store
+.idea
+.vscode

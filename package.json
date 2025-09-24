@@ -1,0 +1,15 @@
+{
+  "name": "whatsapp-interop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo scaffold for WhatsApp-style MLS interoperability stack",
+  "license": "MIT",
+  "packageManager": "pnpm@8.15.0",
+  "scripts": {
+    "dev": "pnpm -r --filter ./services/* dev"
+  },
+  "workspaces": [
+    "services/*",
+    "packages/*"
+  ]
+}
