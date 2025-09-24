@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Interop API
+  version: 0.1.0
+  description: >-
+    REST interface for authentication, conversation management, message history, media pre-signing,
+    search, and export. Designed for interoperability with MLS-based E2EE gateways.
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: http://localhost:3000
+    description: Local development
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: /auth/authorize
+          tokenUrl: /auth/token
+          scopes:
+            chat:full: Access messaging APIs.
+  schemas:
+    MessageEnvelope:
+      type: object
+      required: [message_ulid, conversation_id, sender_user_id, sender_device_id, sent_at_ms, mls_ciphertext, dedupe_key]
+      properties:
+        message_ulid:
+          type: string
+          description: ULID identifying the message.
+        conversation_id:
+          type: string
+        sender_user_id:
+          type: string
+        sender_device_id:
+          type: string
+        sent_at_ms:
+          type: integer
+          format: int64
+        mls_ciphertext:
+          type: string
+          description: Base64 encoded MLS ciphertext.
+        media_ptr:
+          type: object
+          properties:
+            hash:
+              type: string
+            mime:
+              type: string
+            size:
+              type: integer
+              format: int64
+        dedupe_key:
+          type: string
+        delivery_hint:
+          type: string
+          enum: [urgent, normal]
+    ReceiptRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [delivered, read]
+    Conversation:
+      type: object
+      required: [id, type, created_at]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [direct, group, bridge]
+        created_at:
+          type: string
+          format: date-time
+        members:
+          type: array
+          items:
+            type: string
+security:
+  - oauth2: [chat:full]
+paths:
+  /auth/login:
+    post:
+      summary: Password/OIDC login initiating device registration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, credential, device]
+              properties:
+                identifier:
+                  type: string
+                credential:
+                  type: string
+                  description: Password or OIDC authorization code.
+                device:
+                  type: object
+                  required: [device_id, device_public_key]
+                  properties:
+                    device_id:
+                      type: string
+                    device_public_key:
+                      type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token, expires_in, device_token]
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  expires_in:
+                    type: integer
+                  device_token:
+                    type: string
+        '401':
+          description: Invalid credentials
+  /users/me:
+    get:
+      summary: Retrieve current user profile.
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                  display_name:
+                    type: string
+                  devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_id:
+                          type: string
+                        last_seen:
+                          type: string
+                          format: date-time
+  /conversations:
+    post:
+      summary: Create direct, group, or bridge conversation and MLS group.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, members]
+              properties:
+                type:
+                  type: string
+                  enum: [direct, group, bridge]
+                members:
+                  type: array
+                  items:
+                    type: string
+                title:
+                  type: string
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+    get:
+      summary: List user conversations.
+      responses:
+        '200':
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversation'
+  /conversations/{conversationId}/messages:
+    parameters:
+      - in: path
+        name: conversationId
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Page through encrypted history.
+      parameters:
+        - in: query
+          name: before
+          schema:
+            type: string
+            description: ULID exclusive upper bound.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: Messages page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MessageEnvelope'
+                  next_before:
+                    type: string
+    post:
+      summary: Submit encrypted message for ingestion.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageEnvelope'
+      responses:
+        '202':
+          description: Message accepted for delivery
+        '409':
+          description: Duplicate detected
+  /messages/{messageId}/receipt:
+    post:
+      summary: Record delivery/read receipt.
+      parameters:
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptRequest'
+      responses:
+        '202':
+          description: Receipt recorded
+  /media/presign:
+    post:
+      summary: Issue pre-signed URL for media upload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hash, mime, size]
+              properties:
+                hash:
+                  type: string
+                mime:
+                  type: string
+                size:
+                  type: integer
+      responses:
+        '200':
+          description: Upload policy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url:
+                    type: string
+                  headers:
+                    type: object
+                  expires_in:
+                    type: integer
+  /mls/{conversationId}/welcome:
+    get:
+      summary: Retrieve MLS Welcome message for device bootstrap.
+      parameters:
+        - in: path
+          name: conversationId
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Welcome message blob
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /search:
+    get:
+      summary: Search MLS-compliant tags.
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: conversationId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [conversation_id, message_ulid]
+                      properties:
+                        conversation_id:
+                          type: string
+                        message_ulid:
+                          type: string
+  /export:
+    post:
+      summary: Kick off Portable Chat Archive export.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                conversations:
+                  type: array
+                  items:
+                    type: string
+                range_days:
+                  type: integer
+                  default: 30
+      responses:
+        '202':
+          description: Export started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  export_id:
+                    type: string
+  /export/{exportId}:
+    get:
+      summary: Download Portable Chat Archive zip.
+      parameters:
+        - in: path
+          name: exportId
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Zip archive stream
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Export not ready or not found

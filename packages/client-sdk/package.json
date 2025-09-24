@@ -1,0 +1,17 @@
+{
+  "name": "@whatsapp-interop/client-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.2",
+    "@whatsapp-interop/common-types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
